@@ -1,0 +1,69 @@
+//mumax 3.10 [linux_amd64 go1.14(gc) CUDA-10.2]
+//GPU info: Tesla V100-FHHL-16GB(16151MB), CUDA Driver 12.2, cc=7.0, using cc=70 PTX
+//(c) Arne Vansteenkiste, Dynamat LAB, Ghent University, Belgium
+//This is free software without any warranty. See license.txt
+//********************************************************************//
+//  If you use mumax in any work or publication,                      //
+//  we kindly ask you to cite the references in references.bib        //
+//********************************************************************//
+//output directory: YIG_tiltvsphase.out/
+DisableZhangLiTorque = True
+DisableSlonczewskiTorque = False
+length := 8e-6
+width := 50e-9
+thickness := 10e-9
+active_length := 190e-9
+Nx := 2048
+Ny := 16
+Nz := 2
+setgridsize(Nx, Ny, Nz)
+setcellsize(length/Nx, width/Ny, thickness/Nz)
+setgeom(cuboid(length, width, thickness))
+b := cuboid(length, width, thickness).sub(cuboid(active_length, width, thickness))
+defRegion(0, b)
+Msat = 108.57e3
+alphaFree := 2e-3
+alpha = alphaFree
+Aex = 3.5e-12
+lex := sqrt(Aex.GetRegion(0) / (0.5 * mu0 * pow(Msat.GetRegion(0), 2)))
+print(lex)
+//2.173873404247194e-08
+g_fct := 2
+mu_B := 9.2740091523E-24
+h_bar := 1.05457173E-34
+GammaLL = (mu_B / h_bar) * g_fct
+thickness_Pt := 5e-9
+area := (thickness + thickness_Pt) * width
+spin_hall_angle := 0.07
+Pol = spin_hall_angle
+Lambda = 1
+EpsilonPrime = 0
+FixedLayer = vector(0, 1, 0)
+FixedLayerPosition = FIXEDLAYER_TOP
+Ku1 = 5785.71
+anisU = vector(0, 0, 1)
+SetPBC(10, 0, 0)
+//resizing...
+alpha = alphaFree
+numregions := 250
+slicelen := length / numregions
+my := 0.107
+A := 3.5e-12
+G := 1493
+k := (sqrt(2*G) * my) / sqrt(A-A*pow(my, 2))
+m0 := sqrt(1 - pow(my, 2))
+for i := 1; i <= numregions; i++ {
+	x := ((i - 1) * slicelen) - length/2 + slicelen/2
+	defRegion(i+3, cuboid(slicelen, width, thickness).transl(x, 0, 0))
+	m.setRegion(i+3, uniform(m0*cos(k*x), my, m0*sin(k*x)))
+}
+saveas(m, "before_relax")
+autosave(m, 5e-9)
+tableautosave(10e-11)
+run(100e-9)
+saveas(m, "final_state")
+//********************************************************************//
+//Please cite the following references, relevant for your simulation. //
+//See bibtex file in output folder for justification.                 //
+//********************************************************************//
+//   * Vansteenkiste et al., AIP Adv. 4, 107133 (2014).

@@ -1,0 +1,178 @@
+/*
+* YIG Nanowire simulations 2021
+* Based off of A3_10Oe_10Oe_DMI_180nm_56x5.4x8000_4.2K_200K_2.0mA_NoZL.mx3
+* Andy, Chris, Eric, (Yu-Jin), Mishu
+* Simulate SH driven STT on XZ easy plane configuration
+* Basically sets up geometry, boundary conditions, relaxes, and loop Jdensity
+* Oersted field should vary depending on Jdensity
+* B Ext is in plane 10 deg off x-axis
+* Ku1 will vary based on Jdens to model Joule Heating Effects
+* No ZL, DMI
+*/
+
+DisableZhangLiTorque = True
+DisableSlonczewskiTorque = False
+
+/*** Geometry ***/
+length := 8e-6 //40um actual
+width := 50e-9  // 50nm nominal
+thickness := 10e-9
+active_length := 190e-9 //2um actual
+
+c := 4e-9
+Nx := 2048
+Ny := 128
+Nz := 3 //was 2 before, will try as a monolayer first
+setgridsize(Nx, Ny, Nz)
+setcellsize(c, c, c)
+
+setgeom(cuboid(length,width,thickness))                        // x = length, y = width, z = thickness
+saveas(geom, "wire")
+//defRegion(, cuboid(length, width, thickness)                 //full wire
+//defRegion(1, cuboid(active_length, width, thickness))          //active region
+
+//Grains
+grainSize := 30e-9
+randomSeed := 1234567
+maxRegion := 253
+FullWire := maxRegion + 3
+Active := maxRegion + 2
+//ext_make3dgrains(grainSize,0, maxRegion, cuboid(grainSize,grainSize,grainSize), randomSeed)
+ext_makegrains(grainSize, maxRegion, randomSeed)
+//defRegion(FullWire, cuboid(length, width, thickness))
+defRegion(256, cuboid(length, width, thickness).inverse())
+
+/***End  Geometry ***/
+
+
+
+/*** Material Parameters ***/
+// Add references here
+Msat = 101e3  // A/m (1 emu/cc = 10^3 A/m)
+alphaFree := 2e-3 
+alpha = alphaFree
+Aex = 3.5e-12 //Aex_Co = 1.3e-6 erg/cm, Aex_Ni = 0.8e-6 erg/cm --> 1e-6 erg/cm = 10 pJ/m
+lex := sqrt( Aex.GetRegion(0) / (0.5 * mu0 * pow(Msat.GetRegion(0), 2))) //exchange length using aex, msat
+print(lex)
+g_fct := 2 //2.15
+mu_B := 9.2740091523E-24
+h_bar := 1.05457173E-34
+GammaLL = (mu_B/h_bar)*g_fct
+
+/*** End Material Parameters ***/
+
+
+/*** STT Parameters ***/
+// Assumes uniform current density across Pt cross section
+//thickness_Pt := 5e-9
+//cross_sectional_area := (thickness_Pt)*width
+//print(cross_sectional_area)
+// Setting polarization to spin hall angle
+spin_hall_angle := 0.07
+Pol = spin_hall_angle
+// For usual STT, make lambda 1 and epsilonprime 0
+Lambda = 1
+EpsilonPrime = 0
+FixedLayer = vector(0, 1, 0)	// The spins in the current going through FM layer are all pointing in +z direction.
+FixedLayerPosition = FIXEDLAYER_TOP	// Determines whether spin current is traveling from below or above FM layer
+//FreeLayerThickness.Set(5e-9)
+//shunting_factor := 0.7	// How much actually travels through the heavy metal (dependent on what bilayer is being studied, check this!)
+//current_density := (current_min_amps*shunting_factor)/cross_sectional_area // in A/m^2, redefined in loop if sweeping current
+//print(current_density)
+/*** End STT Parameters ***/
+
+
+/*** Anisotropy Parameters ***/
+
+//Ku1.setregion(0, 10800) //10839.3
+Kc := 640
+
+//set random anisotropy variation between grains
+
+for i:=0; i<maxRegion; i++{
+	//random cubic anisotropy direction
+	axis1	:= vector(randNorm(), randNorm(), randNorm())
+	helper	:= vector(randNorm(), randNOrm(), randNorm())
+	axis2	:= axis1.cross(helper)
+	AnisC1.setRegion(i, axis1)
+	AnisC2.setRegion(i, axis2)
+
+	Kc1.SetRegion(i, Kc + randNorm() * 0.1 * Kc)
+	Ku1.setRegion(i, 6000)
+	anisU.setRegion(i, vector(0,0,1))
+}
+//Ku1.SetRegion(FullWire, 6000)
+//Ku1 = 8000
+
+
+
+/*** End Anisotropy Parameters ***/
+
+//reduce exchange coupling between grains by 10%
+for i:=0; i<maxRegion; i++{
+	for j:=i+1; j<maxRegion; j++{
+		ext_ScaleExchange(i,j, $EXCH)
+	}
+}
+
+
+Dind = 9e-6
+//Dbulk = .08e-3
+
+/*** Save Settings ***/
+//tableadd(Ku1)
+//tableadd(m.region(1))
+//t_sample := 10e-12 //t
+
+//TableAddVar(Ku1_cgs,"Ku1","erg/cm^2")
+//TableAddVar(current_val,"current","A")
+/*** End Table Settings ***/
+
+/*** External Field Settings ***/
+B_ext = vector(10e-4,10e-4,10e-4)
+//B_ext.setregion(1, vector(10e-4,10e-4,10e-4))
+//save(B_ext)
+/*** End External Field Settings ***/
+
+//Temp = 275
+
+/*** Relaxation ***/
+// for some reason not saving the relaxed state
+alpha = alphaFree
+m.setRegion(FullWire, uniform(1,.1,.1))
+//m = uniform(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta))
+
+saveas(m, "before_relax")
+save(regions)
+save(Kc1)
+save(AnisC1)
+
+relax()
+
+saveas(m, "after_relax")
+
+/*** Current Density ***/
+
+defRegion(Active, cuboid(active_length, width, thickness).transl(-1e-6,0,0))  
+j = vector(0, 0, $J1)
+j.setRegion(Active, vector(0, 0, -40e10)) //J2, applied to active region
+//j.setRegion(0, vector(0, 0, 0)) //J1, applied to full wire
+
+//relaxMaxErr(1e-25, true)
+
+//run(.1e-9)
+//save(regions)
+//save(Kc1)
+//save(AnisC1)
+//save(AnisC2)
+//save(exchCoupling)
+
+
+autosave(m, 30e-10)
+defRegion(maxRegion+3, xrange(0,4e-9))
+TableAdd(m.Region(maxRegion+3))
+tableautosave(10e-11)
+run(180e-9)
+
+//relax()
+//saveas(m, "final_state")

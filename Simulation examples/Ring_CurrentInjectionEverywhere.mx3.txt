@@ -1,0 +1,80 @@
+//mumax 3.10 [linux_amd64 go1.14(gc) CUDA-10.2]
+//GPU info: Tesla V100-FHHL-16GB(16151MB), CUDA Driver 12.2, cc=7.0, using cc=70 PTX
+//(c) Arne Vansteenkiste, Dynamat LAB, Ghent University, Belgium
+//This is free software without any warranty. See license.txt
+//********************************************************************//
+//  If you use mumax in any work or publication,                      //
+//  we kindly ask you to cite the references in references.bib        //
+//********************************************************************//
+//output directory: RING_Jj2_-0.1000__run1.out/
+DisableZhangLiTorque = True
+DisableSlonczewskiTorque = False
+length := 4e-6
+width := 4e-6
+thickness := 10e-9
+active_length := 190e-9
+c := 4e-9
+Nx := 1024
+Ny := 1024
+Nz := 2
+setgridsize(Nx, Ny, Nz)
+setcellsize(length/Nx, width/Ny, thickness/Nz)
+a := circle(3e-6)
+b := circle(2.9e-6)
+setgeom(a.sub(b))
+defRegion(0, a.sub(b))
+Msat = 125.7e3
+alphaFree := 0.002
+alpha = alphaFree
+Aex = 3.5e-12
+lex := sqrt(Aex.GetRegion(0) / (0.5 * mu0 * pow(Msat.GetRegion(0), 2)))
+print(lex)
+//1.877624785195846e-08
+g_fct := 2
+mu_B := 9.2740091523E-24
+h_bar := 1.05457173E-34
+GammaLL = (mu_B / h_bar) * g_fct
+spin_hall_angle := 0.07
+Pol = spin_hall_angle
+Lambda = 1
+EpsilonPrime = 0
+FixedLayerPosition = FIXEDLAYER_TOP
+Ku1 = 7815.71
+anisU = vector(0, 0, 1)
+alpha = alphaFree
+defRegion(2, YRange(0, width/2))
+defRegion(3, YRange(-width/2, 0))
+tilt := 0
+tiltcalc := 0.159
+Ax := 3.5e-12
+G := 1493
+k := (sqrt(2*G) * tiltcalc) / sqrt(Ax-Ax*pow(tiltcalc, 2))
+m0 := sqrt(1 - pow(tilt, 2))
+rnum := 250
+circm := 9.346e-6
+R := 1.488e-6
+slicelen := circm / rnum
+for i := 1; i <= rnum; i++ {
+	x := ((i - 1) * slicelen) - length/2 + slicelen/2
+	deg := (i - 1) * (360 / rnum)
+	ang := deg * pi / 180
+	defRegion(i+3, cuboid(slicelen, 100e-9, 10e-9).transl(0, -1.48e-6, 0).rotz(ang))
+	tableadd(m.Region(i + 3))
+	mxi := m0 * cos(k*x)
+	mx := mxi*cos(ang) - tilt*sin(ang)
+	my := mxi*sin(ang) + tilt*cos(ang)
+	m.setRegion(i+3, uniform(mx, my, m0*sin(k*x)))
+	FixedLayer.setRegion(i+3, vector(-sin(ang), cos(ang), 0))
+	j.setRegion(i+3, vector(0, 0, 1000000000.0))
+}
+defRegion(1, cuboid(active_length, 100e-9, thickness).transl(0, -1.475e-6, 0))
+tableadd(m.Region(1))
+save(regions)
+autosave(m, 5e-10)
+tableautosave(2e-10)
+run(100e-9)
+//********************************************************************//
+//Please cite the following references, relevant for your simulation. //
+//See bibtex file in output folder for justification.                 //
+//********************************************************************//
+//   * Vansteenkiste et al., AIP Adv. 4, 107133 (2014).
